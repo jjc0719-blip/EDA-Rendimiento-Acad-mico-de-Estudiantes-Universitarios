@@ -178,7 +178,7 @@ def page_eda():
         return df_local
 
     # Use a spinner and cached loader to avoid blocking UI repeatedly
-    excel_path = r'C:\Users\jose.castro\Documents\JBook_CienciaDatos\Pbook_dataviz\Entregable\App\SAR.xlsx'
+    excel_path = https://drive.google.com/drive/folders/18QN29VIiUzrUSFp9vRzUImkPR1QbB3cJ  
     with st.spinner('Cargando datos (rápido en futuras ejecuciones)...'):
         df = load_data_excel(excel_path)
 
@@ -1109,6 +1109,7 @@ ROUTES = {
 }
 
 ROUTES[choice]()
+
 
 
 
