@@ -178,7 +178,7 @@ def page_eda():
         return df_local
 
     # Use a spinner and cached loader to avoid blocking UI repeatedly
-    excel_path = https://drive.google.com/drive/folders/18QN29VIiUzrUSFp9vRzUImkPR1QbB3cJ  
+    excel_path = https://docs.google.com/spreadsheets/d/1wsciSU7p2r-6RpeVgvWZPiFSw2h6nEVw/edit?usp=drive_link&ouid=111103245289757304367&rtpof=true&sd=true 
     with st.spinner('Cargando datos (rápido en futuras ejecuciones)...'):
         df = load_data_excel(excel_path)
 
@@ -1109,6 +1109,7 @@ ROUTES = {
 }
 
 ROUTES[choice]()
+
 
 
 
