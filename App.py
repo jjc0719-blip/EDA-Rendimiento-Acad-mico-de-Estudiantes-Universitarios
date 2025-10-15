@@ -14,6 +14,11 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 import matplotlib.ticker as mtick
 from matplotlib.ticker import MultipleLocator
+import glob
+import hashlib
+from pathlib import Path
+import requests 
+
 
 st.set_page_config(page_title="Análisis Exploratorio del Rendimiento Académico de Estudiantes Universitarios",
                    layout="wide")
@@ -147,40 +152,97 @@ def page_eda():
                 </div>
                 """, unsafe_allow_html=True)
     
-    # --- Optimized data loader: cache + parquet fallback ---
-    @st.cache_data(ttl=60 * 60)
-    def load_data_excel(path, usecols=None):
-        """Load Excel and cache it. If a parquet version exists, read that (much faster).
+    # ---------- Utils ----------
 
-        The function also attempts to write a parquet copy after reading Excel so
-        subsequent runs are faster.
+    @st.cache_data(ttl=60*60, show_spinner=False)
+    def load_parquet(path_str: str) -> pd.DataFrame:
+        """Lee un archivo parquet y lo cachea."""
+        return pd.read_parquet(path_str)
+
+    @st.cache_data(ttl=60*60, show_spinner="Descargando datos...")
+    def download_once(url: str, dest_path_str: str) -> str:
         """
-        p = Path(path)
-        parquet_path = p.with_suffix('.parquet')
+        Descarga el archivo una sola vez y lo guarda en disco.
+        Si ya existe, simplemente devuelve la ruta.
+        """
+        dest_path = Path(dest_path_str)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Try reading parquet first if available
-        if parquet_path.exists():
-            try:
-                return pd.read_parquet(parquet_path)
-            except Exception:
-                # If parquet read fails, fall back to Excel
-                pass
+        if not dest_path.exists():
+            with requests.get(url, stream=True) as r:
+                r.raise_for_status()
+                with open(dest_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+        return str(dest_path)
 
-        # Read Excel (possibly expensive)
-        df_local = pd.read_excel(path, engine="openpyxl", usecols=usecols)
-
-        # Try to persist as parquet for next runs (best-effort)
+    def human_fmt(n):
         try:
-            df_local.to_parquet(parquet_path, index=False)
+            return f"{n:,}".replace(",", ".")
         except Exception:
-            pass
+            return str(n)
 
-        return df_local
+    def get_secret(key: str, default=None):
+        """
+        Intenta leer de st.secrets; si no existe secrets.toml,
+        usa variables de entorno; si no, devuelve default.
+        """
+        try:
+            _ = st.secrets  # fuerza parseo; puede lanzar StreamlitSecretNotFoundError
+            return st.secrets.get(key, default)
+        except Exception:
+            return os.getenv(key, default)
 
-    # Use a spinner and cached loader to avoid blocking UI repeatedly
-    excel_path = "https://docs.google.com/spreadsheets/d/1wsciSU7p2r-6RpeVgvWZPiFSw2h6nEVw/edit?usp=sharing&ouid=111103245289757304367&rtpof=true&sd=true"
-    with st.spinner('Cargando datos (rápido en futuras ejecuciones)...'):
-        df = load_data_excel(excel_path)
+    # ---------- Config de datos ----------
+    # Directorio del archivo actual (app.py)
+    APP_DIR = Path(__file__).resolve().parent
+
+    # Nombre del archivo parquet (puedes cambiarlo)
+    FILENAME = get_secret("DATA_FILENAME", "dataset.parquet")
+
+    # Si defines un DATA_URL (en secrets o como variable de entorno), lo descargamos una sola vez
+    DATA_URL = get_secret("DATA_URL", None)
+
+    # Ruta local por defecto: MISMO DIRECTORIO que app.py (evita problemas de backslashes)
+    LOCAL_PATH = APP_DIR / FILENAME
+
+    st.title("Demo: Carga optimizada con Parquet")
+
+    # ---------- Resolución de la ruta ----------
+    if DATA_URL:
+        # Descarga una sola vez y usa ese archivo
+        try:
+            local_file = download_once(DATA_URL, str(LOCAL_PATH))
+            st.caption(f"Fuente: descargado desde DATA_URL → {FILENAME}")
+        except Exception as e:
+            st.error(f"No se pudo descargar el archivo desde DATA_URL.\nDetalle: {e}")
+            st.stop()
+    else:
+        # Sin URL: usamos archivo local junto a app.py
+        local_file = str(LOCAL_PATH)
+        if not Path(local_file).exists():
+            st.error(
+                "No se encontró el archivo local de datos.\n\n"
+                f"Busqué en: `{local_file}`\n\n"
+                "Soluciones:\n"
+                f"1) Copia tu `.parquet` al mismo directorio que este `app.py` con el nombre `{FILENAME}`, o\n"
+                "2) Define `DATA_URL` (en `.streamlit/secrets.toml` o variable de entorno) para descargarlo automáticamente.\n"
+            )
+            st.stop()
+
+    # ---------- Carga de datos ----------
+    with st.spinner("Cargando datos (Parquet)..."):
+        try:
+            df = load_parquet(local_file)
+        except Exception as e:
+            st.error(f"No se pudo leer el archivo Parquet `{local_file}`.\nDetalle: {e}")
+            st.stop()
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ # iNICIA EDA
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
     st.markdown("### 📋 Información de la Estructura del DataFrame")
 
@@ -1109,10 +1171,6 @@ ROUTES = {
 }
 
 ROUTES[choice]()
-
-
-
-
 
 
 
